@@ -1,0 +1,9 @@
+{
+  "name": "cssc-calendar",
+  "description": "Add your Calgary Sport and Social Club games as events in your existing calendar app(s).",
+  "main": "index.js",
+  "license": "MIT",
+  "scripts": {
+    "start": "node ."
+  }
+}
