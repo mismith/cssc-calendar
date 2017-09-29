@@ -4,6 +4,17 @@
   "main": "index.js",
   "license": "MIT",
   "scripts": {
-    "start": "node ."
+    "start": "node .",
+    "dev": "nodemon ."
+  },
+  "dependencies": {
+    "ical-generator": "^0.2.10",
+    "inquirer": "^3.3.0",
+    "jsdom": "^9.9.1",
+    "moment-timezone": "^0.5.13",
+    "scrape-it": "^3.3.3"
+  },
+  "devDependencies": {
+    "nodemon": "^1.12.1"
   }
 }
