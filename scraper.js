@@ -84,81 +84,125 @@ function scrapeLeagueDivisions(url) {
 }
 
 function scrapeSeason(url) {
-  return jsdomEnvAsync(url)
-    .then((window) => {
-      // setup
-      const scheduleNode = window.document.querySelector('.sscSchedule');
-      if (!scheduleNode) throw new Error('Could not find schedule node');
+  return scrapeIt(url, {
+    facilities: {
+      listItem: '.sscSchedule table:nth-of-type(1) tbody tr',
+      data: {
+        name: 'td:nth-of-type(1)',
+        address: 'td:nth-of-type(2)',
+        link: {
+          selector: 'td:nth-of-type(3) a[href]',
+          attr: 'href',
+        },
+      },
+    },
+    teams: {
+      listItem: '.sscSchedule table:nth-of-type(2) tbody tr td:nth-child(2n+2)',
+      data: {
+        name: {
+          // TODO
+          selector: 'b',
+          how: ch => ch[0].next.data,
+          convert: v => v.replace(/^[\s-]+|[\s-]+$/ig, ''),
+        },
+        captain: {
+          selector: 'b',
+          convert: v => v.replace(/^[\s-]+|[\s-]+$/ig, ''),
+        },
+      },
+    },
+    days: {
+      listItem: '.sscSchedule table:nth-of-type(2) ~ table',
+      data: {
+        date: 'thead th b',
+        detail: {
+          selector: 'td[colspan]',
+          convert: v => v ? v.replace(/\s{2,}/g, ' ').replace(/^\s+|\s+$/g, '') : undefined,
+        },
+        games: {
+          listItem: 'tbody tr',
+          data: {
+            location: {
+              selector: 'td[rowspan=4] b, td:not([rowspan]):not([align]):first-child b',
+              convert: v => (/^(vs\.)+$/ig.test(v) ? undefined : v) || undefined,
+              // how: ch => {
+              //   if (ch.parent) console.log(ch.parent());
+              //   return ch.textContent;
+              // },
+            },
+            time: {
+              selector: 'td[rowspan=4], td[align=center]',
+              convert: (v) => {
+                const matches = (v || '').match(/(\d+:\d{2} [AP]M)/i);
+                if (matches) {
+                  return matches[0];
+                }
+              },
+            },
+            teams: {
+              selector: 'td:not([colspan]):last-child',
+              convert: (v) => {
+                if (!v) return []; // exclude spacer/divider
 
-      const facilitiesNode = scheduleNode.querySelector('table:nth-of-type(1)');
-      if (!facilitiesNode) throw new Error('Could not find facilities table');
+                const sep = ' vs. ';
+                const teams = v.split(sep);
+                return teams.length > 2 ? [teams[0] + sep + teams[1], teams[2] + sep + teams[3]] : teams;
+              }
+            },
+          },
+        },
+      },
+    },
+  })
+    .then((data) => {
+      data.games = [];
+      let previous = {};
+      let finalWeekIndex = 0;
+      const sourceDateFormat = 'dddd, MMMM D, YYYY';
+      data.days.forEach((day, i) => {
+        // auto-guess dates for semis/finals
+        let nextWeek;
+        if (day.date !== 'Date TBD') {
+          finalWeekIndex = i;
+        } else {
+          nextWeek = moment(data.days[finalWeekIndex].date, sourceDateFormat)
+            .add(i - finalWeekIndex, 'weeks')
+            .hours(19);
+        }
 
-      const teamsNode = scheduleNode.querySelector('table:nth-of-type(2)');
-      if (!teamsNode) throw new Error('Could not find teams table');
+        // cascade games
+        day.games.forEach((game) => {
+          // clean up
+          if (!game.teams.length) return;
+          if (!game.location) delete game.location;
+          if (!game.time) delete game.time;
 
-      const gamesNodes = scheduleNode.querySelectorAll('table:nth-of-type(2) ~ table');
-      if (!gamesNodes || !gamesNodes.length) throw new Error('Could not find any games');
+          // cascade detail
+          if (day.detail && !game.detail) game.detail = day.detail;
 
-      // methods
-      function getFacilities() {
-        return Array.from(facilitiesNode.querySelectorAll('tbody tr')).map(tr => {
-          return {
-            name:    tr.querySelector('td:nth-of-type(1)').textContent,
-            address: tr.querySelector('td:nth-of-type(2)').textContent,
-            link:    tr.querySelector('td:nth-of-type(3) a[href]').getAttribute('href'),
-          };
-        });
-      }
-      function getTeams() {
-        let teams = [];
-        Array.from(teamsNode.querySelectorAll('tbody tr')).forEach(tr => {
-          for(let i = 2; i <= 4; i += 2) {
-            teams.push({
-              name:    tr.querySelector(`td:nth-of-type(${i}) b`).nextSibling.textContent.replace(/^[\s-]+|[\s-]+$/ig, ''),
-              captain: tr.querySelector(`td:nth-of-type(${i}) b`).textContent.replace(/^[\s-]+|[\s-]+$/ig, ''),
-            });
+          // auto-guess dates for semis/finals
+          if (nextWeek) {
+            game.date = nextWeek.format(sourceDateFormat);
+            game.datetime = nextWeek.format();
+            game.time = 'TBD';
+            game.location = 'TBD';
+            game.detail = 'TBD';
+          } else {
+            game.date = day.date;
           }
+
+          // empties cascade/fallback to previous game's values
+          previous = Object.assign({}, previous, game);
+          if (!game.datetime) {
+            previous.datetime = moment(`${previous.time}, ${previous.date}`, `h:mm A, ${sourceDateFormat}`).format();
+          }
+
+          data.games.push(previous);
         });
-        return teams;
-      }
-      function getGames() {
-        let games = [];
-        Array.from(gamesNodes).map(table => {
-          let locationNode;
-          let detailNode;
-          games = games.concat(Array.from(table.querySelectorAll('tbody tr')).map(game => {
-            // time & date
-            const timeNode = table.querySelector('td[rowspan="4"]') || game.querySelector('td[align="center"]');
-            let time = timeNode ? timeNode.textContent : '';
-            const matches = time.match(/(\d+:\d{2} [AP]M)/i);
-            if (matches) {
-              time = matches[0];
-            }
-            const date = table.querySelector('thead tr:nth-of-type(1) th b').textContent;
-            const datetime = moment(`${time}, ${date}`, 'h:mm A, dddd, MMMM D, YYYY').format();
+      });
+      delete data.days;
 
-            // game types
-            detailNode = detailNode || game.querySelector('td[colspan]');
-
-            // location
-            locationNode = table.querySelector('td[rowspan="4"] b') || game.querySelector('td:not([colspan]):first-child') || locationNode; // fallback to previous location for multi-row tables
-
-            return locationNode ? {
-              location: locationNode.textContent,
-              datetime: datetime,
-              teams:  (game.querySelector('td:last-child').textContent.match('^(.*?) vs. (.*?)$') || []).slice(1, 3),
-              detail: detailNode && detailNode.textContent.replace(/\s{2,}/g, ' ').replace(/^\s+|\s+$/g, '') || null,
-            } : false;
-          }).filter(game => !!game)); // filter out separator rows
-        });
-        return games;
-      }
-
-      return {
-        facilities: getFacilities(url),
-        teams: getTeams(url),
-        games: getGames(url),
-      };
+      return data;
     });
 }
 
