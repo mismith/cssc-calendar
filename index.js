@@ -69,14 +69,3 @@ scrapeLeagues()
       .then(answers => answers.save)
       .then(save => save && data.calendar.saveSync(`${data.league.name}.ics`));
   });
-
-  // const facilities = getFacilities();
-  // console.log('facilities', facilities);
-
-  // @TODO: map locations and teams to full objects
-  // @NB: this is tough for facilities since they use shortnames
-  // schedule.forEach(game => {
-  //   console.log(game.location);
-  //   game.location = facilities.find(f => f.name === game.location);
-  // });
-  // console.log(schedule);

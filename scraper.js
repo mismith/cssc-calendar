@@ -2,6 +2,7 @@
 const scrapeIt = require('scrape-it');
 const jsdom = require('jsdom');
 const moment = require('moment-timezone');
+const fuzzy = require('fuzzy');
 
 function jsdomEnvAsync(...args) {
   return new Promise((resolve, reject) => {
@@ -15,6 +16,7 @@ function jsdomEnvAsync(...args) {
 
 // config
 const BASE_URL = 'https://www.calgarysportsclub.com';
+const sourceDateFormat = 'dddd, MMMM D, YYYY';
 
 // main
 function scrapeLeagues() {
@@ -158,7 +160,6 @@ function scrapeSeason(url) {
       data.games = [];
       let previous = {};
       let finalWeekIndex = 0;
-      const sourceDateFormat = 'dddd, MMMM D, YYYY';
       data.days.forEach((day, i) => {
         // auto-guess dates for semis/finals
         let nextWeek;
@@ -180,21 +181,17 @@ function scrapeSeason(url) {
           // cascade detail
           if (day.detail && !game.detail) game.detail = day.detail;
 
-          // auto-guess dates for semis/finals
-          if (nextWeek) {
-            game.date = nextWeek.format(sourceDateFormat);
-            game.datetime = nextWeek.format();
-            game.time = 'TBD';
-            game.location = 'TBD';
-            game.detail = 'TBD';
-          } else {
-            game.date = day.date;
-          }
-
           // empties cascade/fallback to previous game's values
           previous = Object.assign({}, previous, game);
-          if (!game.datetime) {
-            previous.datetime = moment(`${previous.time}, ${previous.date}`, `h:mm A, ${sourceDateFormat}`).format();
+
+          // auto-guess dates for semis/finals
+          if (nextWeek) {
+            previous.date = nextWeek.format(sourceDateFormat);
+            delete previous.time;
+            delete previous.location;
+            delete previous.detail;
+          } else {
+            previous.date = day.date;
           }
 
           data.games.push(previous);
@@ -206,19 +203,43 @@ function scrapeSeason(url) {
     });
 }
 
+function getFacilityFromLocation(location, facilities) {
+    const simplifiedLocation = location.replace(/ (School|North|South|East|West|Calgary|- .*?)$/i, '').replace(/[^\w]+/g, ' ');
+    const matches = [].concat(
+      fuzzy.filter(simplifiedLocation, facilities, {
+        extract: (facility) => facility.name,
+      }),
+      fuzzy.filter(simplifiedLocation.replace(/[^A-Z]+/g, ''), facilities, {
+        extract: (facility) => facility.name.replace(/[^A-Z]+/g, ' '),
+      })
+    );
+    return matches.length ? matches[0].original : null;
+}
+
 function parseSchedule(season, team) {
   const schedule = [];
-  season.games.filter(game => game.teams.includes(team)).forEach(game => {
-    game.teams = game.teams.filter(t => t !== team);
-    const existingGame = schedule.find(g => moment(g.datetime).isSame(game.datetime, 'day'));
-    if (existingGame) {
-      // append team
-      existingGame.teams = [].concat(existingGame.teams, game.teams);
-    } else {
-      // add game
-      schedule.push(game);
-    }
-  });
+  season.games
+    .filter(game => !game.time || game.teams.includes(team))
+    .forEach(game => {
+      game.teams = game.teams.filter(t => t !== team);
+
+      game.datetime = moment(`${game.time || '7:00 PM'}, ${game.date}`, `h:mm A, ${sourceDateFormat}`).format();
+
+      // merge days with mutiple opponents
+      const existingGame = schedule.find(g => moment(g.datetime).isSame(game.datetime, 'day'));
+      if (existingGame) {
+        // append team
+        existingGame.teams = [].concat(existingGame.teams, game.teams);
+      } else {
+        // add game
+        schedule.push(game);
+      }
+
+      // link facility
+      if (game.location) {
+        game.facility = getFacilityFromLocation(game.location, season.facilities);
+      }
+    });
   return schedule;
 }
 
@@ -226,5 +247,6 @@ module.exports = {
   scrapeLeagues,
   scrapeLeagueDivisions,
   scrapeSeason,
+  getFacilityFromLocation,
   parseSchedule,
 };
