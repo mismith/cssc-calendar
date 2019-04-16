@@ -72,7 +72,7 @@ function scrapeLeagueDivisions(url) {
       },
     },
   })
-    .then(data => {
+    .then(({ data }) => {
       const divisions = [];
       data.days.forEach(day => {
         data.tabs.find(t => `#${t.id}` === day.tab).divisions.forEach(division => {
@@ -156,7 +156,7 @@ function scrapeSeason(url) {
       },
     },
   })
-    .then((data) => {
+    .then(({ data }) => {
       data.games = [];
       let previous = {};
       let finalWeekIndex = 0;
