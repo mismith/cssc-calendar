@@ -11,6 +11,21 @@ const {
 } = require('./calendar.js');
 
 // main
+/*
+const URL1 = 'https://www.calgarysportsclub.com/leagues/volleyball/indoor-volleyball/schedules/fall-2017/thurs-int-b';
+const URL2 = 'https://www.calgarysportsclub.com/leagues/dodgeball/indoor-dodgeball/schedules/fall-2017/wed-rec-multi-format';
+
+scrapeSeason(URL2)
+  .then(season => {
+    // console.log(JSON.stringify(season, null, 2));
+
+    const schedule = parseSchedule(season, 'Ball So Hard');
+
+    console.log(schedule);
+  });
+// */
+
+///*
 scrapeLeagues()
   .then(leagues => {
     return inquirer.prompt({
@@ -69,3 +84,4 @@ scrapeLeagues()
       .then(answers => answers.save)
       .then(save => save && data.calendar.saveSync(`${data.league.name}.ics`));
   });
+// */

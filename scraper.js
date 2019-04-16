@@ -25,7 +25,7 @@ function scrapeLeagues() {
       const leaguesNode = window.document.querySelector('#navigation a[href="/leagues/"] + ul');
       if (!leaguesNode) throw new Error('Could not find leagues node');
 
-      const leagues = Array.from(leaguesNode.querySelectorAll('li:not(.menu-mlid-2138):not(.menu-mlid-2344) a')).map(a => {
+      const leagues = Array.from(leaguesNode.querySelectorAll('li a[href^="/leagues/"]')).map(a => {
         const parent = a.parentNode.parentNode.parentNode;
         let group;
         if (parent.classList.contains('expanded') && !parent.classList.contains('first')) {
@@ -45,19 +45,14 @@ function scrapeLeagueDivisions(url) {
     days: {
       listItem: '#tabs-0-tabs li',
       data: {
-        name: 'a',
-        tab: {
-          selector: 'a',
-          attr: 'href',
+        name: {
+          how: 'text',
         },
       },
     },
     tabs: {
-      listItem: '#tabs-0-tabs > div',
+      listItem: '#tabs-0-tabs [id]',
       data: {
-        id: {
-          attr: 'id',
-        },
         divisions: {
           listItem: 'p',
           data: {
@@ -65,7 +60,6 @@ function scrapeLeagueDivisions(url) {
             url: {
               selector: 'a',
               attr: 'href',
-              convert: href => `${BASE_URL}${href}`,
             },
           },
         },
@@ -74,8 +68,9 @@ function scrapeLeagueDivisions(url) {
   })
     .then(({ data }) => {
       const divisions = [];
-      data.days.forEach(day => {
-        data.tabs.find(t => `#${t.id}` === day.tab).divisions.forEach(division => {
+      data.days.forEach((day, index) => {
+        const tab = data.tabs[index];
+        tab.divisions.forEach(division => {
           divisions.push(Object.assign({
             day: day.name,
           }, division));
@@ -88,9 +83,12 @@ function scrapeLeagueDivisions(url) {
 function scrapeSeason(url) {
   return scrapeIt(url, {
     facilities: {
-      listItem: '.sscSchedule table:nth-of-type(1) tbody tr',
+      listItem: '.sscSchedule > table:nth-of-type(1) tbody tr',
       data: {
-        name: 'td:nth-of-type(1)',
+        name: {
+          selector: 'td:nth-of-type(1)',
+          convert: v => v.replace(/\n.*?$/, ''),
+        },
         address: 'td:nth-of-type(2)',
         link: {
           selector: 'td:nth-of-type(3) a[href]',
@@ -99,43 +97,45 @@ function scrapeSeason(url) {
       },
     },
     teams: {
-      listItem: '.sscSchedule table:nth-of-type(2) tbody tr td:nth-child(2n+2)',
+      listItem: '.sscSchedule > div:nth-of-type(2) table tbody tr td:nth-child(2n+2)',
       data: {
         name: {
           // TODO
-          selector: 'b',
+          selector: 'b:last-of-type',
           how: ch => ch[0].next.data,
           convert: v => v.replace(/^[\s-]+|[\s-]+$/ig, ''),
         },
         captain: {
-          selector: 'b',
+          selector: 'b:first-of-type',
           convert: v => v.replace(/^[\s-]+|[\s-]+$/ig, ''),
         },
       },
     },
     days: {
-      listItem: '.sscSchedule table:nth-of-type(2) ~ table',
+      listItem: '.sscSchedule > table:nth-of-type(2) ~ table',
       data: {
         date: 'thead th b',
         detail: {
-          selector: 'td[colspan]',
-          convert: v => v ? v.replace(/\s{2,}/g, ' ').replace(/^\s+|\s+$/g, '') : undefined,
+          selector: 'tr:not([style]) td[colspan]',
+          convert: v => v ? v.replace(/\s{2,}/g, ' ').replace(/^[\s-]+|[\s-]+$/ig, '') : undefined,
         },
         games: {
           listItem: 'tbody tr',
           data: {
             location: {
-              selector: 'td[rowspan=4] b, td:not([rowspan]):not([align]):first-child b',
-              convert: v => (/^(vs\.)+$/ig.test(v) ? undefined : v) || undefined,
+              selector: 'td[rowspan=4] b, td[colspan=2][style], td:not([rowspan]):not([align]):first-child b',
+              convert: v => (/^(vs\.)+$/ig.test(v)
+                ? undefined
+                : v.replace(/(\d{1,2}:\d{2} ?[AP]M)/i, '').replace(/^[\s-]+|[\s-]+$/ig, '')) || undefined,
               // how: ch => {
               //   if (ch.parent) console.log(ch.parent());
               //   return ch.textContent;
               // },
             },
             time: {
-              selector: 'td[rowspan=4], td[align=center]',
+              selector: 'td[rowspan=4], td[colspan=2][style], td[align=center]',
               convert: (v) => {
-                const matches = (v || '').match(/(\d+:\d{2} [AP]M)/i);
+                const matches = (v || '').match(/(\d{1,2}:\d{2} ?[AP]M)/i);
                 if (matches) {
                   return matches[0];
                 }
@@ -172,11 +172,21 @@ function scrapeSeason(url) {
         }
 
         // cascade games
+        let group = {};
         day.games.forEach((game) => {
           // clean up
-          if (!game.teams.length) return;
-          if (!game.location) delete game.location;
-          if (!game.time) delete game.time;
+          if (!game.teams.length) {
+            group = game;
+            return;
+          }
+          if (!game.location) {
+            if (group.location) game.location = group.location;
+            else delete game.location;
+          }
+          if (!game.time) {
+            if (group.time) game.time = group.time;
+            else delete game.time;
+          }
 
           // cascade detail
           if (day.detail && !game.detail) game.detail = day.detail;
