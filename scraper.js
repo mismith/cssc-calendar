@@ -81,7 +81,7 @@ function scrapeLeagueDivisions(url) {
 }
 
 function scrapeSeason(url) {
-  return scrapeIt(url, {
+  return scrapeIt(url.replace(new RegExp(`^(${BASE_URL})?/+`), `${BASE_URL}/`), {
     facilities: {
       listItem: '.sscSchedule > table:nth-of-type(1) tbody tr',
       data: {
