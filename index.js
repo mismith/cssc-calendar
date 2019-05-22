@@ -82,6 +82,13 @@ scrapeLeagues()
       message: 'Export iCal file?',
     })
       .then(answers => answers.save)
-      .then(save => save && data.calendar.saveSync(`${data.league.name}.ics`));
+      .then((save) => {
+        if (save) {
+          data.calendar.saveSync(`${data.league.name}.ics`);
+        } else {
+          // write to STDOUT
+          console.log(JSON.stringify(data, null, 2));
+        }
+      });
   });
 // */
