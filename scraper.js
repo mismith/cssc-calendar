@@ -22,7 +22,7 @@ const sourceDateFormat = 'dddd, MMMM D, YYYY';
 function scrapeLeagues() {
   return jsdomEnvAsync(BASE_URL)
     .then((window) => {
-      const leaguesNode = window.document.querySelector('#navigation a[href="/leagues/"] + ul');
+      const leaguesNode = window.document.querySelector('#navigation a.nav-leagues + ul');
       if (!leaguesNode) throw new Error('Could not find leagues node');
 
       const leagues = Array.from(leaguesNode.querySelectorAll('li a[href^="/leagues/"]')).map(a => {
@@ -112,7 +112,7 @@ function scrapeSeason(url) {
       },
     },
     days: {
-      listItem: '.sscSchedule > table:nth-of-type(2) ~ table',
+      listItem: '.sscSchedule > table[width]',
       data: {
         date: 'thead th b',
         detail: {
@@ -123,7 +123,7 @@ function scrapeSeason(url) {
           listItem: 'tbody tr',
           data: {
             location: {
-              selector: 'td[rowspan=4] b, td[colspan=2][style], td:not([rowspan]):not([align]):first-child b',
+              selector: 'td[rowspan=4] b, td[rowspan=1] b, td[colspan=2][style], td:not([rowspan]):not([align]):first-child b',
               convert: v => (/^(vs\.)+$/ig.test(v)
                 ? undefined
                 : v.replace(/(\d{1,2}:\d{2} ?[AP]M)/i, '').replace(/^[\s-]+|[\s-]+$/ig, '')) || undefined,
@@ -133,7 +133,7 @@ function scrapeSeason(url) {
               // },
             },
             time: {
-              selector: 'td[rowspan=4], td[colspan=2][style], td[align=center]',
+              selector: 'td',
               convert: (v) => {
                 const matches = (v || '').match(/(\d{1,2}:\d{2} ?[AP]M)/i);
                 if (matches) {
@@ -254,6 +254,7 @@ function parseSchedule(season, team) {
 }
 
 module.exports = {
+  BASE_URL,
   scrapeLeagues,
   scrapeLeagueDivisions,
   scrapeSeason,
