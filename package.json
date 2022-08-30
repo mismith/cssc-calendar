@@ -12,7 +12,7 @@
     "ical-generator": "^0.2.10",
     "inquirer": "^3.3.0",
     "jsdom": "^9.9.1",
-    "moment-timezone": "^0.5.13",
+    "moment-timezone": "^0.5.35",
     "scrape-it": "^5.1.4"
   },
   "devDependencies": {
